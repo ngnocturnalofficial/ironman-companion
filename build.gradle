@@ -1,0 +1,55 @@
+plugins {
+    id 'java'
+}
+
+repositories {
+    mavenLocal()
+    maven {
+        url = 'https://repo.runelite.net'
+        content {
+            includeGroupByRegex('net\\.runelite.*')
+        }
+    }
+    mavenCentral()
+}
+
+def runeLiteVersion = 'latest.release'
+def pluginMainClass = 'com.nocturnal.ironman.IronmanCompanionDevLauncher'
+
+dependencies {
+    compileOnly group: 'net.runelite', name: 'client', version: runeLiteVersion
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation group: 'net.runelite', name: 'client', version: runeLiteVersion
+    testImplementation group: 'net.runelite', name: 'jshell', version: runeLiteVersion
+}
+
+group = 'com.nocturnal'
+version = '1.2.0'
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release.set(11)
+}
+
+test {
+    useJUnit()
+}
+
+tasks.register('run', JavaExec) {
+    group = 'application'
+    description = 'Launches a RuneLite developer client with Ironman Companion loaded.'
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = pluginMainClass
+    jvmArgs '-ea'
+    args '--developer-mode', '--debug'
+}
+
+jar {
+    manifest {
+        attributes(
+            'Implementation-Title': 'Ironman Companion',
+            'Implementation-Version': project.version
+        )
+    }
+}
