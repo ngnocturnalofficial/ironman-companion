@@ -6,9 +6,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.nocturnal.ironman.data.BossCatalog;
 import com.nocturnal.ironman.data.DestinationCatalog;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
-import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -21,7 +18,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 public class WikiService
 {
@@ -33,9 +35,16 @@ public class WikiService
     private static final int EXTRACT_CHARS = 6000;
     private static final long CACHE_SECONDS = 600;
     private final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
+    private final OkHttpClient httpClient;
 
     @Inject
-    public WikiService() {}
+    public WikiService(OkHttpClient httpClient)
+    {
+        this.httpClient = httpClient.newBuilder()
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(12, TimeUnit.SECONDS)
+            .build();
+    }
 
     public List<String> search(String query) throws Exception
     {
@@ -134,22 +143,17 @@ public class WikiService
 
     String get(String address) throws Exception
     {
-        HttpURLConnection connection = (HttpURLConnection) URI.create(address).toURL().openConnection();
-        connection.setRequestMethod("GET");
-        connection.setConnectTimeout(8000);
-        connection.setReadTimeout(12000);
-        connection.setRequestProperty("User-Agent", USER_AGENT);
-        try
+        Request request = new Request.Builder()
+            .url(address)
+            .header("User-Agent", USER_AGENT)
+            .get()
+            .build();
+        try (Response response = httpClient.newCall(request).execute())
         {
-            int status = connection.getResponseCode();
-            InputStream stream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
-            String response = HttpResponseReader.read(stream, 1_500_000, "OSRS Wiki");
-            if (status < 200 || status >= 300) throw new IllegalStateException("OSRS Wiki returned HTTP " + status);
-            return response;
-        }
-        finally
-        {
-            connection.disconnect();
+            if (!response.isSuccessful())
+                throw new IllegalStateException("OSRS Wiki returned HTTP " + response.code());
+            ResponseBody body = response.body();
+            return HttpResponseReader.read(body == null ? null : body.byteStream(), 1_500_000, "OSRS Wiki");
         }
     }
 

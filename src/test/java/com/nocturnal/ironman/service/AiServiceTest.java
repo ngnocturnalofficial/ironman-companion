@@ -12,6 +12,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import okhttp3.OkHttpClient;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -36,8 +37,9 @@ public class AiServiceTest
 
     private AiService service(int port)
     {
-        return new AiService(config(port), new WikiService(),
-            new PlannerService(new ScenePathfinder()));
+        OkHttpClient httpClient = new OkHttpClient();
+        return new AiService(config(port), new WikiService(httpClient),
+            new PlannerService(new ScenePathfinder()), httpClient);
     }
 
     private HttpServer provider(int status, String response, AtomicReference<String> received) throws Exception

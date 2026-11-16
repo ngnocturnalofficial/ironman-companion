@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import java.util.ArrayList;
 import java.util.List;
+import okhttp3.OkHttpClient;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
@@ -41,6 +42,8 @@ public class WikiServiceTest
         class StubWiki extends WikiService
         {
             final List<String> requests = new ArrayList<>();
+
+            StubWiki() { super(new OkHttpClient()); }
 
             @Override
             String get(String address)

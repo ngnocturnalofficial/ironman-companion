@@ -6,15 +6,19 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.nocturnal.ironman.IronmanCompanionConfig;
 import com.nocturnal.ironman.model.AccountSnapshot;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import javax.inject.Inject;
 import java.util.Map;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.ResponseBody;
 
 public class AiService
 {
@@ -26,13 +30,19 @@ public class AiService
     private final IronmanCompanionConfig config;
     private final WikiService wikiService;
     private final PlannerService planner;
+    private final OkHttpClient httpClient;
 
     @Inject
-    public AiService(IronmanCompanionConfig config, WikiService wikiService, PlannerService planner)
+    public AiService(IronmanCompanionConfig config, WikiService wikiService, PlannerService planner,
+        OkHttpClient httpClient)
     {
         this.config = config;
         this.wikiService = wikiService;
         this.planner = planner;
+        this.httpClient = httpClient.newBuilder()
+            .connectTimeout(12, TimeUnit.SECONDS)
+            .readTimeout(45, TimeUnit.SECONDS)
+            .build();
     }
 
     public String ask(String question, AccountSnapshot account) throws Exception
@@ -108,29 +118,19 @@ public class AiService
         messages.add(user);
         request.add("messages", messages);
 
-        HttpURLConnection connection = (HttpURLConnection) endpointUri.toURL().openConnection();
-        connection.setRequestMethod("POST");
-        connection.setConnectTimeout(12000);
-        connection.setReadTimeout(45000);
-        connection.setDoOutput(true);
-        connection.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
-        if (!key.isEmpty()) connection.setRequestProperty("Authorization", "Bearer " + key);
         byte[] bytes = request.toString().getBytes(StandardCharsets.UTF_8);
-        connection.setFixedLengthStreamingMode(bytes.length);
+        Request.Builder httpRequest = new Request.Builder()
+            .url(endpoint)
+            .post(RequestBody.create(MediaType.parse("application/json; charset=UTF-8"), bytes));
+        if (!key.isEmpty()) httpRequest.header("Authorization", "Bearer " + key);
 
-        try
+        try (Response response = httpClient.newCall(httpRequest.build()).execute())
         {
-            try (OutputStream out = connection.getOutputStream()) { out.write(bytes); }
-            int status = connection.getResponseCode();
-            if (status < 200 || status >= 300)
-                throw new IllegalStateException(providerError(status));
-            InputStream stream = connection.getInputStream();
-            String response = HttpResponseReader.read(stream, MAX_RESPONSE_CHARS, "Provider");
-            return parseCompletion(response);
-        }
-        finally
-        {
-            connection.disconnect();
+            if (!response.isSuccessful())
+                throw new IllegalStateException(providerError(response.code()));
+            ResponseBody body = response.body();
+            return parseCompletion(HttpResponseReader.read(
+                body == null ? null : body.byteStream(), MAX_RESPONSE_CHARS, "Provider"));
         }
     }
 
