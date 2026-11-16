@@ -21,7 +21,7 @@ import net.runelite.api.Skill;
 import net.runelite.api.Varbits;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.coords.WorldPoint;
-import net.runelite.api.widgets.WidgetInfo;
+import net.runelite.api.widgets.ComponentID;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.game.ItemManager;
 
@@ -191,7 +191,7 @@ public class AccountService
 
     private boolean isBankOpen()
     {
-        Widget widget = client.getWidget(WidgetInfo.BANK_CONTAINER);
+        Widget widget = client.getWidget(ComponentID.BANK_CONTAINER);
         return widget != null && !widget.isHidden();
     }
 
