@@ -59,7 +59,7 @@ public class SpellTeleportCatalogTest
             Collections.singletonMap("Magic", 99), Collections.emptyMap(), Collections.emptyMap(),
             Collections.emptyMap(), Collections.emptyMap(), 3, 10, "test", null, false,
             new ProgressSnapshot(quests, diaries), SlayerTaskSnapshot.empty());
-        assertFalse(SpellTeleportCatalog.available(withDiary).stream()
+        assertTrue(SpellTeleportCatalog.available(withDiary).stream()
             .anyMatch(t -> t.name.equals("Watchtower Teleport")));
         assertTrue(SpellTeleportCatalog.available(withDiary).stream()
             .anyMatch(t -> t.name.equals("Watchtower Teleport (Yanille landing)")));
@@ -70,7 +70,7 @@ public class SpellTeleportCatalogTest
     {
         Map<String, String> quests = new HashMap<>();
         quests.put("Twilight's Promise", "FINISHED");
-        quests.put("Recipe for Disaster - Freeing King Awowogei", "FINISHED");
+        quests.put("Recipe for Disaster - King Awowogei", "FINISHED");
         AccountSnapshot account = account("Standard", 99, quests);
         assertTrue(SpellTeleportCatalog.available(account).stream()
             .anyMatch(t -> t.name.equals("Civitas illa Fortis Teleport")));
@@ -91,22 +91,22 @@ public class SpellTeleportCatalogTest
     }
 
     @Test
-    public void varrockAndCamelotTeleportsRespectHardDiaryLandingChanges()
+    public void diaryRewardsAddSelectableDestinationsWithoutRemovingTheOriginal()
     {
         AccountSnapshot base = account("Standard", 99, Collections.emptyMap());
         assertTrue(SpellTeleportCatalog.available(base).stream().anyMatch(t -> t.name.equals("Varrock Teleport")));
         assertTrue(SpellTeleportCatalog.available(base).stream().anyMatch(t -> t.name.equals("Camelot Teleport")));
 
         Map<String, String> diaries = new HashMap<>();
-        diaries.put("Varrock", "Hard: Complete");
+        diaries.put("Varrock", "Medium: Complete");
         diaries.put("Kandarin", "Hard: Complete");
         AccountSnapshot upgraded = new AccountSnapshot("test", "Ironman", "Standard",
             Collections.singletonMap("Magic", 99), Collections.emptyMap(), Collections.emptyMap(),
             Collections.emptyMap(), Collections.emptyMap(), 3, 10, "test", null, false,
             new ProgressSnapshot(Collections.emptyMap(), diaries), SlayerTaskSnapshot.empty());
-        assertFalse(SpellTeleportCatalog.available(upgraded).stream().anyMatch(t -> t.name.equals("Varrock Teleport")));
+        assertTrue(SpellTeleportCatalog.available(upgraded).stream().anyMatch(t -> t.name.equals("Varrock Teleport")));
         assertTrue(SpellTeleportCatalog.available(upgraded).stream().anyMatch(t -> t.name.equals("Varrock Teleport (Grand Exchange landing)")));
-        assertFalse(SpellTeleportCatalog.available(upgraded).stream().anyMatch(t -> t.name.equals("Camelot Teleport")));
+        assertTrue(SpellTeleportCatalog.available(upgraded).stream().anyMatch(t -> t.name.equals("Camelot Teleport")));
         assertTrue(SpellTeleportCatalog.available(upgraded).stream().anyMatch(t -> t.name.equals("Camelot Teleport (Seers' bank landing)")));
     }
 

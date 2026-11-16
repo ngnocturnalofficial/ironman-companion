@@ -13,7 +13,7 @@ repositories {
     mavenCentral()
 }
 
-def runeLiteVersion = 'latest.release'
+def runeLiteVersion = '1.13.6'
 def pluginMainClass = 'com.nocturnal.ironman.IronmanCompanionDevLauncher'
 
 dependencies {
@@ -41,7 +41,7 @@ tasks.register('run', JavaExec) {
     description = 'Launches a RuneLite developer client with Ironman Companion loaded.'
     classpath = sourceSets.test.runtimeClasspath
     mainClass = pluginMainClass
-    jvmArgs '-ea'
+    jvmArgs '-ea', '--add-opens=java.base/java.lang.reflect=ALL-UNNAMED'
     args '--developer-mode', '--debug'
 }
 

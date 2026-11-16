@@ -19,7 +19,7 @@ import net.runelite.api.ItemContainer;
 import net.runelite.api.Player;
 import net.runelite.api.Skill;
 import net.runelite.api.Varbits;
-import net.runelite.api.Widget;
+import net.runelite.api.widgets.Widget;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.config.ConfigManager;
@@ -59,6 +59,8 @@ public class AccountService
     public void reloadBankCache()
     {
         farmingService.resetRegion();
+        latest = null;
+        itemNameCache.clear();
         bankCache = new LinkedHashMap<>();
         bankCapturedAt = null;
         progressCaptured = false;
@@ -87,6 +89,18 @@ public class AccountService
             bankCache = new LinkedHashMap<>();
             bankCapturedAt = null;
         }
+    }
+
+    public void clearSession()
+    {
+        latest = null;
+        bankCache = new LinkedHashMap<>();
+        bankCapturedAt = null;
+        progressCache = ProgressSnapshot.empty();
+        progressCaptured = false;
+        lastBankOpen = false;
+        itemNameCache.clear();
+        farmingService.resetRegion();
     }
 
     public AccountSnapshot capture()
@@ -144,10 +158,35 @@ public class AccountService
         Map<Integer, String> itemNames = captureItemNames(inventory, equipment, bankCache);
         latest = new AccountSnapshot(name, accountTypeName(client.getVarbitValue(Varbits.ACCOUNT_TYPE)),
             spellbookName(client.getVarbitValue(Varbits.SPELLBOOK)), levels, xp,
-            inventory, equipment, bankCache, client.getCombatLevel(), client.getTotalLevel(), location,
+            inventory, equipment, bankCache, player == null ? 0 : player.getCombatLevel(), client.getTotalLevel(), location,
             bankCapturedAt, bankOpen, progressCache, slayer, captureNavigation(), itemNames,
-            farmingService.capture());
+            farmingService.capture(), captureTravelSettings());
         return latest;
+    }
+
+    private Map<String, Integer> captureTravelSettings()
+    {
+        Map<String, Integer> settings = new LinkedHashMap<>();
+        settings.put("varrockGe", client.getVarbitValue(net.runelite.api.gameval.VarbitID.VARROCK_GE_TELEPORT));
+        settings.put("seersCamelot", client.getVarbitValue(net.runelite.api.gameval.VarbitID.SEERS_CAMELOT_TELEPORT));
+        settings.put("yanille", client.getVarbitValue(net.runelite.api.gameval.VarbitID.YANILLE_TELEPORT_LOCATION));
+        settings.put("ringLassar", client.getVarbitValue(net.runelite.api.gameval.VarbitID.DT2_LASSAR_TELEPORT));
+        settings.put("ringGhorrock", client.getVarbitValue(net.runelite.api.gameval.VarbitID.DT2_GHORROCK_TELEPORT));
+        settings.put("ringScar", client.getVarbitValue(net.runelite.api.gameval.VarbitID.DT2_SCAR_TELEPORT));
+        settings.put("ringStranglewood", client.getVarbitValue(net.runelite.api.gameval.VarbitID.DT2_STRANGLEWOOD_TELEPORT));
+        settings.put("fairyPermission", client.getVarbitValue(net.runelite.api.gameval.VarbitID.FAIRYRING_PERMISSION));
+        settings.put("visitedKourend", client.getVarbitValue(net.runelite.api.gameval.VarbitID.ZEAH_PLAYERHASVISITED));
+        settings.put("visitedVarlamore", client.getVarbitValue(net.runelite.api.gameval.VarbitID.VARLAMORE_VISITED));
+        settings.put("visitedGrimstone", client.getVarbitValue(net.runelite.api.gameval.VarbitID.GRIMSTONE_VISITED));
+        settings.put("colosseumGlory", client.getVarpValue(net.runelite.api.gameval.VarPlayerID.COLOSSEUM_GLORY));
+        settings.put("quetzalNetwork", client.getVarpValue(net.runelite.api.gameval.VarPlayerID.QUETZALS_UNLOCKED));
+        settings.put("quetzalCamTorum", client.getVarbitValue(net.runelite.api.gameval.VarbitID.QUETZAL_CAMTORUM));
+        settings.put("quetzalColossalWyrm", client.getVarbitValue(net.runelite.api.gameval.VarbitID.QUETZAL_COLOSSALWYRM));
+        settings.put("quetzalColosseum", client.getVarbitValue(net.runelite.api.gameval.VarbitID.QUETZAL_COLOSSEUM));
+        settings.put("quetzalKastori", client.getVarbitValue(net.runelite.api.gameval.VarbitID.QUETZAL_KASTORI));
+        settings.put("quetzalOuterFortis", client.getVarbitValue(net.runelite.api.gameval.VarbitID.QUETZAL_OUTERFORTIS));
+        settings.put("quetzalSalvagerOverlook", client.getVarbitValue(net.runelite.api.gameval.VarbitID.QUETZAL_SALVAGEROVERLOOK));
+        return settings;
     }
 
     private boolean isBankOpen()

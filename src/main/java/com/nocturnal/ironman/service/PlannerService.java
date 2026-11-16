@@ -2,6 +2,7 @@ package com.nocturnal.ironman.service;
 
 import com.nocturnal.ironman.data.DestinationCatalog;
 import com.nocturnal.ironman.data.FairyRingCatalog;
+import com.nocturnal.ironman.data.QuetzalCatalog;
 import com.nocturnal.ironman.data.BossCatalog;
 import com.nocturnal.ironman.data.SkillProgressionCatalog;
 import com.nocturnal.ironman.data.SpellTeleportCatalog;
@@ -59,7 +60,7 @@ public class PlannerService
         ready.sort(String.CASE_INSENSITIVE_ORDER);
         banked.sort(String.CASE_INSENSITIVE_ORDER);
         List<String> result = new ArrayList<>();
-        result.add("READY NOW — inventory/equipment");
+        result.add("CARRIED TELEPORT OPTIONS — check required charges and destination settings");
         result.addAll(ready.isEmpty() ? java.util.Collections.singletonList("No catalogued teleport item detected in inventory or equipment.") : ready);
         result.add("");
         result.add(includeBank ? "BANKED — owned, but not currently usable" : "BANKED — omitted by the AI bank-context setting");
@@ -74,7 +75,8 @@ public class PlannerService
         result.add("\nFAIRY RING NETWORK");
         result.add(fairyRingAccessStatus(account, includeBank));
         result.add("Destination-specific access still applies; a built POH fairy ring is not detectable from this account snapshot.");
-        result.add("\nSpell options are checked against spellbook, Magic and known quest completion; required runes/rune-pouch contents are not verified. Charged item variants are detected by name where possible, but exact remaining charges are not calculated.");
+        result.add("Additional realm/house fairy codes without fixed world-map landings: AJQ (Dorgesh-Kaan cave), BJR (Fisher King), BKQ (Enchanted Valley), BLQ (Yu'biusk), CKP (Cosmic plane), DIQ (built POH), DIR (Gorak's Plane), DLS (Myreque hideout). Some require quests or a built ring and cannot be spatially routed from the current snapshot.");
+        result.add("\nSpell options are checked against spellbook, Magic and known quest completion; required runes/rune-pouch contents are not verified. Unknown destination unlocks are withheld. Actual remaining item charges and some optional unlocks require in-game confirmation.");
         return result;
     }
 
@@ -113,6 +115,12 @@ public class PlannerService
         WorldPoint targetPoint = new WorldPoint(target.x, target.y, target.plane);
         suggestions.add("DESTINATION: " + target.name + " (" + target.activity + ")");
         suggestions.add("Access: " + target.access);
+        if ("Zul-Andra".equals(target.name)
+            && !"FINISHED".equals(account.getProgress().getQuests().get("Regicide")))
+        {
+            suggestions.add("LOCKED: Complete Regicide before travelling to Zul-Andra or Zulrah.");
+            return suggestions;
+        }
 
         NavigationSnapshot navigation = account.getNavigation();
         if (navigation != null && navigation.getPlayerLocation() != null)
@@ -195,15 +203,20 @@ public class PlannerService
             }
         }
 
+        appendGlobalTravelChains(suggestions, account, target, navigation, ready, banked, spellCandidates);
+
         suggestions.add("\nFAIRY RING NETWORK");
         suggestions.add(fairyRingAccessStatus(account));
         if (hasCarriedFairyRingAccess(account))
         {
-            FairyRingCatalog.Ring nearestEntry = nearestSceneFairyRing(navigation);
+            FairyRingCatalog.Ring nearestEntry = nearestSceneFairyRing(account, navigation);
             boolean entryIsSceneReachable = nearestEntry != null;
             if (nearestEntry == null)
-                nearestEntry = FairyRingCatalog.nearest(navigation == null ? null : navigation.getPlayerLocation());
-            FairyRingCatalog.Ring nearestLanding = FairyRingCatalog.nearest(targetPoint);
+                nearestEntry = FairyRingCatalog.nearestUnlocked(account,
+                    navigation == null ? null : navigation.getPlayerLocation());
+            FairyRingCatalog.Ring nearestLanding = FairyRingCatalog.nearestUnlockedLanding(account, targetPoint, target.name);
+            if (nearestLanding != null && nearestLanding.location.distanceTo2D(targetPoint) > 450)
+                nearestLanding = null;
             if (nearestEntry != null && nearestLanding != null && navigation != null
                 && navigation.getPlayerLocation() != null)
             {
@@ -254,6 +267,61 @@ public class PlannerService
         }
         suggestions.add("\nImportant: bank ownership does not mean an item is available to use. Distances from teleport landing points are straight-line lower bounds, not collision-aware route lengths. Item charges, spellbook, quest access and destination selection are not inferred from ownership.");
         return suggestions;
+    }
+
+    private void appendGlobalTravelChains(List<String> lines, AccountSnapshot account,
+        DestinationCatalog.Destination destination, NavigationSnapshot navigation,
+        List<TeleportCandidate> carried, List<TeleportCandidate> banked,
+        List<SpellTeleportCatalog.SpellTeleport> spells)
+    {
+        WorldPoint target = new WorldPoint(destination.x, destination.y, destination.plane);
+        GlobalTravelPlanner graph = new GlobalTravelPlanner(account, target, destination.name,
+            hasCarriedFairyRingAccess(account));
+        List<GlobalTravelPlanner.Origin> ready = new ArrayList<>();
+        if (navigation != null && navigation.getPlayerLocation() != null)
+            ready.add(new GlobalTravelPlanner.Origin("Start at your current location",
+                navigation.getPlayerLocation(), 0));
+
+        for (TeleportCandidate teleport : carried)
+            ready.add(new GlobalTravelPlanner.Origin(
+                "Use carried " + teleport.teleport.name + " (verify charges and landing)",
+                new WorldPoint(teleport.teleport.x, teleport.teleport.y, teleport.teleport.plane), 10));
+        for (SpellTeleportCatalog.SpellTeleport spell : spells)
+            ready.add(new GlobalTravelPlanner.Origin(
+                "Cast " + spell.name + " (confirm runes and selected destination)",
+                new WorldPoint(spell.x, spell.y, 0), 10));
+
+        List<GlobalTravelPlanner.Route> readyRoutes = graph.rank(ready, 4);
+        lines.add("\nACCOUNT-AWARE MULTI-LEG TRAVEL (estimated lower-bound ranking)");
+        if (readyRoutes.isEmpty())
+        {
+            lines.add("No short, catalogued walking/transport connection was found. Review the individual teleport starts and destination access notes.");
+        }
+        else
+        {
+            for (int i = 0; i < readyRoutes.size(); i++)
+            {
+                GlobalTravelPlanner.Route route = readyRoutes.get(i);
+                lines.add((i + 1) + ". Approximate cost " + route.estimatedCost + " tile-equivalents");
+                for (String step : route.steps) lines.add("  → " + step);
+            }
+        }
+        List<GlobalTravelPlanner.Origin> withdraw = new ArrayList<>();
+        for (TeleportCandidate teleport : banked)
+            withdraw.add(new GlobalTravelPlanner.Origin(
+                "Withdraw " + teleport.teleport.name + " from a bank first; then teleport (charges unverified)",
+                new WorldPoint(teleport.teleport.x, teleport.teleport.y, teleport.teleport.plane), 10));
+        List<GlobalTravelPlanner.Route> bankRoutes = graph.rank(withdraw, 2);
+        if (!bankRoutes.isEmpty())
+        {
+            lines.add("Bank-dependent chains (require getting to a bank and withdrawing the item):");
+            for (GlobalTravelPlanner.Route route : bankRoutes)
+            {
+                lines.add("  Approximate cost after withdrawal " + route.estimatedCost + " tile-equivalents");
+                for (String step : route.steps) lines.add("    → " + step);
+            }
+        }
+        lines.add("Transport edges use detected quests, items, diaries and known landing data. All off-scene walking segments are geometric lower bounds; water, terrain, stairs, boats, shortcuts, hazards and optional unlocks may change the true route.");
     }
 
     public List<String> progressionSuggestions(AccountSnapshot account)
@@ -330,7 +398,7 @@ public class PlannerService
         else
             lines.addAll(detected);
         lines.add("Generic gear categories and unlisted alternatives still require manual review.");
-        lines.add("\\nSUPPLIES CHECKLIST");
+        lines.add("\nSUPPLIES CHECKLIST");
         for (String item : boss.supplies)
         {
             if (isGenericSupply(item))
@@ -503,12 +571,12 @@ public class PlannerService
                 int spellDistance = spell == null ? Integer.MAX_VALUE : new WorldPoint(spell.x, spell.y, 0).distanceTo2D(new WorldPoint(next.x, next.y, next.plane));
                 int itemDistance = readyTeleport == null ? Integer.MAX_VALUE : new WorldPoint(readyTeleport.x, readyTeleport.y, readyTeleport.plane).distanceTo2D(new WorldPoint(next.x, next.y, next.plane));
                 FairyRingCatalog.Ring fairyLanding = hasCarriedFairyRingAccess(account)
-                    ? FairyRingCatalog.nearest(new WorldPoint(next.x, next.y, next.plane)) : null;
+                    ? FairyRingCatalog.nearestUnlocked(account, new WorldPoint(next.x, next.y, next.plane)) : null;
                 int fairyDistance = fairyLanding == null ? Integer.MAX_VALUE
                     : fairyLanding.location.distanceTo2D(new WorldPoint(next.x, next.y, next.plane));
                 if (fairyLanding != null && fairyDistance < Math.min(spellDistance, itemDistance))
                 {
-                    FairyRingCatalog.Ring entry = FairyRingCatalog.nearest(cursor);
+                    FairyRingCatalog.Ring entry = FairyRingCatalog.nearestUnlocked(account, cursor);
                     access = "fairy ring " + fairyLanding.code + " (landing ~" + fairyDistance
                         + " tiles away; nearest entry " + (entry == null ? "unknown" : entry.code) + ")";
                 }
@@ -592,20 +660,23 @@ public class PlannerService
         TeleportCatalog.Teleport quetzal = TeleportCatalog.ALL.stream().filter(t -> t.name.equals("Quetzal whistle")).findFirst().orElse(null);
         TeleportCatalog.Teleport hunterCape = TeleportCatalog.ALL.stream().filter(t -> t.name.equals("Hunter cape")).findFirst().orElse(null);
         TeleportCatalog.Teleport civitas = TeleportCatalog.ALL.stream().filter(t -> t.name.equals("Civitas illa Fortis teleport")).findFirst().orElse(null);
+        boolean ajpUnlocked = FairyRingCatalog.ALL.stream()
+            .anyMatch(ring -> "AJP".equals(ring.code) && FairyRingCatalog.isDestinationUnlocked(account, ring));
         if (civitas != null && countAccessible(account, civitas) > 0) return "carried: Civitas illa Fortis teleport → local route to Ortus Farm (city-side route anchor ~33 tiles away)";
-        if (hasCarriedFairyRingAccess(account)) return "carried: use a nearby fairy ring and dial AJP for the Ortus Farm area; confirm the final walk in game";
+        if (ajpUnlocked && hasCarriedFairyRingAccess(account)) return "carried: use a nearby fairy ring and dial AJP for the Ortus Farm area; confirm the final walk in game";
         if (quetzal != null && countAccessible(account, quetzal) > 0) return "carried: Quetzal whistle → Hunter Guild, then run north to Ortus Farm";
         if (hunterCape != null && countAccessible(account, hunterCape) > 0) return "carried: Hunter cape → Hunter Guild, then run north to Ortus Farm";
-        if (fairyRingAccessStatus(account).startsWith("Staff detected in inventory")) return "equip the carried Dramen/Lunar staff, then use fairy ring AJP for the Ortus Farm area";
-        if (includeBank && fairyRingAccessStatus(account, true).startsWith("Staff detected in bank")) return "banked: withdraw and equip a Dramen/Lunar staff, then use fairy ring AJP for the Ortus Farm area";
-        if (hasPotentialHouseFairyRing(account)) return "possible POH fairy ring route to AJP if a ring has been built; built state is not detected";
+        if (ajpUnlocked && fairyRingAccessStatus(account).startsWith("Staff detected in inventory")) return "equip the carried Dramen/Lunar staff, then use fairy ring AJP for the Ortus Farm area";
+        if (ajpUnlocked && includeBank && fairyRingAccessStatus(account, true).startsWith("Staff detected in bank")) return "banked: withdraw and equip a Dramen/Lunar staff, then use fairy ring AJP for the Ortus Farm area";
+        if (ajpUnlocked && hasPotentialHouseFairyRing(account)) return "possible POH fairy ring route to AJP if a ring has been built; built state is not detected";
         if (includeBank && civitas != null && countBanked(account, civitas) > 0) return "banked: withdraw Civitas illa Fortis teleport; local route to Ortus Farm";
         if (includeBank && quetzal != null && countBanked(account, quetzal) > 0) return "banked: Quetzal whistle → Hunter Guild (withdraw first), then run north";
         if (includeBank && hunterCape != null && countBanked(account, hunterCape) > 0) return "banked: Hunter cape (withdraw first), then teleport to Hunter Guild";
-        return "fallback: fairy ring AJP if A Fairy Tale II is started and a Dramen/Lunar staff or POH ring is available; continue to the farm";
+        if (ajpUnlocked) return "fallback: ferry or mainland approach to Varlamore; fairy ring AJP is unlocked if a ring network entry and staff or diary waiver are available";
+        return "fallback: visit Varlamore and confirm access to Avium Savannah; then unlock/use fairy ring AJP or an accessible Quetzal destination";
     }
 
-    private FairyRingCatalog.Ring nearestSceneFairyRing(NavigationSnapshot navigation)
+    private FairyRingCatalog.Ring nearestSceneFairyRing(AccountSnapshot account, NavigationSnapshot navigation)
     {
         if (navigation == null || navigation.getPlayerLocation() == null) return null;
         WorldPoint current = navigation.getPlayerLocation();
@@ -613,6 +684,7 @@ public class PlannerService
         int bestSteps = Integer.MAX_VALUE;
         for (FairyRingCatalog.Ring ring : FairyRingCatalog.ALL)
         {
+            if (ring.location == null || !FairyRingCatalog.isDestinationUnlocked(account, ring)) continue;
             if (ring.location.getPlane() != current.getPlane()) continue;
             int dx = ring.location.getX() - navigation.getBaseX();
             int dy = ring.location.getY() - navigation.getBaseY();
@@ -656,6 +728,8 @@ public class PlannerService
         String fairyTwo = account.getProgress().getQuests().get("Fairytale II - Cure a Queen");
         if (!"IN_PROGRESS".equals(fairyTwo) && !"FINISHED".equals(fairyTwo))
             missing.add("permission during Fairytale II - Cure a Queen");
+        else if (account.getTravelSetting("fairyPermission") == 0)
+            missing.add("the Fairy Godfather's permission during Fairytale II");
         String[] prerequisites = {"The Restless Ghost", "Priest in Peril", "Nature Spirit", "Lost City", "Fairytale I - Growing Pains"};
         for (String quest : prerequisites)
             if (!"FINISHED".equals(account.getProgress().getQuests().get(quest))) missing.add(quest);
@@ -780,18 +854,56 @@ public class PlannerService
         TeleportCatalog.Teleport teleport, String itemName)
     {
         if (itemName == null) return true;
+        if (teleport.name.startsWith("Quetzal whistle"))
+            return !itemName.toLowerCase(java.util.Locale.ROOT).contains("blueprint")
+                && QuetzalCatalog.isDestinationAvailable(account, teleport.destination);
         String diary = account.getProgress().getDiaries().get("Ardougne");
         boolean ardougneHard = diary != null && diary.contains("Hard: Complete");
         String varrockDiary = account.getProgress().getDiaries().get("Varrock");
-        boolean varrockHard = varrockDiary != null && varrockDiary.contains("Hard: Complete");
+        boolean varrockMedium = varrockDiary != null && (varrockDiary.contains("Medium: Complete")
+            || varrockDiary.contains("Hard: Complete") || varrockDiary.contains("Elite: Complete"));
         String kandarinDiary = account.getProgress().getDiaries().get("Kandarin");
         boolean kandarinHard = kandarinDiary != null && kandarinDiary.contains("Hard: Complete");
-        if ("Watchtower teleport".equals(teleport.name) && ardougneHard) return false;
-        if ("Watchtower teleport — Yanille landing".equals(teleport.name) && !ardougneHard) return false;
-        if ("Varrock teleport".equals(teleport.name) && varrockHard) return false;
-        if ("Varrock teleport — Grand Exchange landing".equals(teleport.name) && !varrockHard) return false;
-        if ("Camelot teleport".equals(teleport.name) && kandarinHard) return false;
-        if ("Camelot teleport — Seers' bank landing".equals(teleport.name) && !kandarinHard) return false;
+        if ("Watchtower teleport — Yanille landing".equals(teleport.name)
+            && !ardougneHard) return false;
+        if ("Varrock teleport — Grand Exchange landing".equals(teleport.name)
+            && !varrockMedium) return false;
+        if ("Camelot teleport — Seers' bank landing".equals(teleport.name)
+            && !kandarinHard) return false;
+
+        if (teleport.name.startsWith("Enchanted lyre — "))
+        {
+            String fremennik = account.getProgress().getDiaries().get("Fremennik");
+            boolean elite = fremennik != null && fremennik.contains("Elite: Complete");
+            boolean hard = elite || (fremennik != null && fremennik.contains("Hard: Complete"));
+            if (teleport.name.contains("Waterbirth Island") && !hard) return false;
+            if ((teleport.name.contains("Neitiznot") || teleport.name.contains("Jatizso"))
+                && !elite) return false;
+        }
+
+        if (teleport.name.startsWith("Ring of shadows"))
+        {
+            // 28329 is the uncharged version. Every teleport consumes a charge.
+            if (!"FINISHED".equals(account.getProgress().getQuests().get("Desert Treasure II"))) return false;
+            if (itemName.toLowerCase(java.util.Locale.ROOT).contains("uncharged")) return false;
+            if (!"Ring of shadows".equals(teleport.name))
+            {
+                String unlock = teleport.name.contains("Lassar") ? "ringLassar"
+                    : teleport.name.contains("Ghorrock") ? "ringGhorrock"
+                    : teleport.name.contains("Scar") ? "ringScar" : "ringStranglewood";
+                if (account.getTravelSetting(unlock) <= 0) return false;
+            }
+        }
+        if ("Stony basalt — upper landing".equals(teleport.name))
+        {
+            String fremennik = account.getProgress().getDiaries().get("Fremennik");
+            if (account.getRealLevels().getOrDefault("Agility", 1) < 73 || fremennik == null
+                || (!fremennik.contains("Hard: Complete") && !fremennik.contains("Elite: Complete"))) return false;
+        }
+        if (("Icy basalt".equals(teleport.name) || teleport.name.startsWith("Stony basalt"))
+            && !"FINISHED".equals(account.getProgress().getQuests().get("Making Friends with My Arm"))) return false;
+        if ("Ring of dueling — Fortis Colosseum".equals(teleport.name)
+            && account.getTravelSetting("colosseumGlory") < 12000) return false;
 
         String item = itemName.toLowerCase(java.util.Locale.ROOT);
         boolean maxCape = item.startsWith("max cape");

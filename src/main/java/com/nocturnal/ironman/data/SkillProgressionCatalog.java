@@ -16,7 +16,7 @@ public final class SkillProgressionCatalog
     static
     {
         Map<String, List<Milestone>> data = new LinkedHashMap<>();
-        add(data, "Attack", m(40, "Rune weapons"), m(60, "Dragon weapons"), m(70, "Abyssal whip"), m(75, "Ghrazi rapier and other high-tier weapons"));
+        add(data, "Attack", m(40, "Rune weapons"), m(60, "Dragon weapons"), m(70, "Abyssal whip"), m(80, "Ghrazi rapier and other high-tier weapons"));
         add(data, "Defence", m(40, "Rune armour"), m(60, "Dragon armour"), m(70, "Barrows armour"));
         add(data, "Strength", m(50, "Mid-game melee setup checkpoint"), m(60, "High-tier melee training checkpoint"), m(70, "End-game melee setup checkpoint"));
         add(data, "Hitpoints", m(50, "Mid-game survivability checkpoint"), m(70, "High-level PvM survivability checkpoint"), m(90, "End-game PvM survivability checkpoint"));
@@ -25,7 +25,7 @@ public final class SkillProgressionCatalog
         add(data, "Magic", m(55, "High Level Alchemy"), m(75, "Trident of the seas"), m(94, "Ice Barrage (Desert Treasure I)"));
         add(data, "Cooking", m(40, "Lobsters"), m(62, "Monkfish (Swan Song)"), m(80, "Sharks"), m(84, "Anglerfish"));
         add(data, "Woodcutting", m(35, "Teak trees"), m(50, "Mahogany trees"), m(60, "Yew trees"), m(75, "Magic trees"), m(90, "Redwood trees"));
-        add(data, "Fletching", m(50, "Magic shortbow"), m(55, "Broad bolts (requires the Slayer unlock)"), m(75, "Magic longbow"), m(81, "Rune darts"));
+        add(data, "Fletching", m(55, "Broad bolts (requires the Slayer unlock)"), m(80, "Magic shortbow"), m(81, "Rune darts"), m(85, "Magic longbow"));
         add(data, "Fishing", m(62, "Monkfish (Swan Song)"), m(76, "Sharks"), m(82, "Anglerfish"));
         add(data, "Firemaking", m(50, "Wintertodt"), m(60, "Yew logs"), m(75, "Magic logs"), m(90, "Redwood logs"));
         add(data, "Crafting", m(40, "Ruby jewellery"), m(63, "Dragonstone jewellery"), m(75, "Zenyte jewellery (Monkey Madness II access)"));

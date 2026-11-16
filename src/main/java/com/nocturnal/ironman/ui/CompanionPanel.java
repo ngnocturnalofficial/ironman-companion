@@ -3,14 +3,13 @@ package com.nocturnal.ironman.ui;
 import com.nocturnal.ironman.data.ActivityCatalog;
 import com.nocturnal.ironman.data.BossCatalog;
 import com.nocturnal.ironman.data.DestinationCatalog;
-import com.nocturnal.ironman.data.DestinationCatalog;
 import com.nocturnal.ironman.data.SkillProgressionCatalog;
 import com.nocturnal.ironman.model.AccountSnapshot;
 import com.nocturnal.ironman.model.Goal;
 import com.nocturnal.ironman.service.AiService;
 import com.nocturnal.ironman.service.PlannerService;
 import java.awt.BorderLayout;
-import java.awt.Dimension;
+import java.awt.CardLayout;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
@@ -28,7 +27,6 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
-import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.SwingWorker;
@@ -59,7 +57,9 @@ public class CompanionPanel extends PluginPanel
     private final JComboBox<String> destination = new JComboBox<>(DestinationCatalog.ALL.stream().map(d -> d.name).toArray(String[]::new));
     private final JComboBox<String> activityChoice = new JComboBox<>(ActivityCatalog.ALL.stream().map(a -> a.title).toArray(String[]::new));
     private final JTextField questName = new JTextField(16);
-    private JTabbedPane tabs;
+    private final CardLayout sectionLayout = new CardLayout();
+    private final JPanel sectionCards = new JPanel(sectionLayout);
+    private final JComboBox<String> sectionChoice = new JComboBox<>();
     private final JTextArea navigation = area();
     private final JTextArea chat = area();
     private final JTextField bankFilter = new JTextField();
@@ -70,49 +70,88 @@ public class CompanionPanel extends PluginPanel
     private final List<Goal> goals = new ArrayList<>();
     private final List<AiService.ChatMessage> aiHistory = new ArrayList<>();
     private long aiConversationRevision;
+    private SwingWorker<String, Void> activeAiWorker;
     private AccountSnapshot snapshot;
 
     public CompanionPanel(PlannerService planner, AiService ai, ConfigManager configManager, ClientThread clientThread)
     {
-        super();
+        super(false);
         this.planner = planner;
         this.ai = ai;
         this.configManager = configManager;
         this.clientThread = clientThread;
         setLayout(new BorderLayout());
-        setPreferredSize(new Dimension(390, 600));
         setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
         JLabel title = new JLabel("IRONMAN COMPANION"); title.setFont(title.getFont().deriveFont(Font.BOLD, 16f));
-        JLabel subtitle = new JLabel("Account-aware progression and route planning"); subtitle.setForeground(UIManager.getColor("Label.disabledForeground"));
+        JLabel subtitle = new JLabel("Your Ironman planning hub"); subtitle.setForeground(UIManager.getColor("Label.disabledForeground"));
         JPanel header = new JPanel(new GridLayout(2,1)); header.add(title); header.add(subtitle); add(header, BorderLayout.NORTH);
-        tabs = new JTabbedPane();
         destination.setEditable(true);
-        destination.setPreferredSize(new Dimension(155, 26));
         activityChoice.setEditable(true);
-        activityChoice.setPreferredSize(new Dimension(155, 26));
         bossChoice.setEditable(true);
-        tabs.addTab("Overview", wrap(dashboard)); tabs.addTab("Skills", skillsPanel()); tabs.addTab("Bank", searchableItemsPanel(bank, bankFilter)); tabs.addTab("Inventory", searchableItemsPanel(inventory, inventoryFilter));
-        tabs.addTab("Goals", goalsPanel); tabs.addTab("Quests", questPanel()); tabs.addTab("Farming", farmingPanel()); tabs.addTab("Slayer", slayerPanel());
-        tabs.addTab("Activities", activitiesPanel()); tabs.addTab("Routes", routePanel()); tabs.addTab("Bossing", bossingPanel()); tabs.addTab("AI", aiPanel());
-        add(tabs, BorderLayout.CENTER);
+        addSection("Overview", wrap(dashboard));
+        addSection("Skills", skillsPanel());
+        addSection("Bank", searchableItemsPanel(bank, bankFilter));
+        addSection("Inventory", searchableItemsPanel(inventory, inventoryFilter));
+        addSection("Goals", goalsPanel);
+        addSection("Quests", questPanel());
+        addSection("Farming", farmingPanel());
+        addSection("Slayer", slayerPanel());
+        addSection("Activities", activitiesPanel());
+        addSection("Routes", routePanel());
+        addSection("Bossing", bossingPanel());
+        addSection("AI", aiPanel());
+
+        JPanel navigationBar = new JPanel(new BorderLayout(6, 0));
+        navigationBar.add(new JLabel("View"), BorderLayout.WEST);
+        navigationBar.add(sectionChoice, BorderLayout.CENTER);
+        JPanel body = new JPanel(new BorderLayout(0, 8));
+        body.add(navigationBar, BorderLayout.NORTH);
+        body.add(sectionCards, BorderLayout.CENTER);
+        add(body, BorderLayout.CENTER);
+        sectionChoice.addActionListener(e -> {
+            Object selection = sectionChoice.getSelectedItem();
+            if (selection != null) sectionLayout.show(sectionCards, selection.toString());
+        });
+        sectionChoice.setSelectedItem("Overview");
         renderGoals(); renderActivities(null);
         showEmpty();
     }
 
+    private void addSection(String name, java.awt.Component content)
+    {
+        sectionChoice.addItem(name);
+        sectionCards.add(content, name);
+    }
+
     private JPanel routePanel()
     {
-        JPanel p = new JPanel(new BorderLayout(4,4)); JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        top.add(new JLabel("Destination")); top.add(destination); JButton go = new JButton("Plan"); top.add(go);
+        JPanel p = new JPanel(new BorderLayout(6, 6));
+        JPanel selector = new JPanel(new BorderLayout(4, 0));
+        selector.add(destination, BorderLayout.CENTER);
+        JButton go = new JButton("Plan");
+        selector.add(go, BorderLayout.EAST);
         go.addActionListener(e -> {
             if (snapshot == null) return;
             Object value = destination.getEditor().getItem();
             String target = value == null ? "" : value.toString().trim();
             if (!target.isEmpty()) navigation.setText(String.join("\n", planner.routeSuggestions(snapshot, target)));
         });
-        JButton available = new JButton("My teleports"); available.addActionListener(e -> navigation.setText("Available teleport items (bank snapshot included):\n\n" + String.join("\n", planner.teleports(snapshot))));
-        JButton nearest = new JButton("Nearest"); nearest.addActionListener(e -> navigation.setText("Nearest detected option:\n" + planner.nearestKnownTeleport(snapshot)));
-        JButton herb = new JButton("Herb run"); herb.addActionListener(e -> navigation.setText(String.join("\n", planner.herbRun(snapshot))));
-        top.add(available); top.add(nearest); top.add(herb); p.add(top, BorderLayout.NORTH); p.add(wrap(navigation), BorderLayout.CENTER); return p;
+        JButton available = new JButton("My teleports");
+        available.addActionListener(e -> navigation.setText("Available teleport items (bank snapshot included):\n\n" + String.join("\n", planner.teleports(snapshot))));
+        JButton nearest = new JButton("Nearest");
+        nearest.addActionListener(e -> navigation.setText("Nearest detected option:\n" + planner.nearestKnownTeleport(snapshot)));
+        JButton herb = new JButton("Herb run");
+        herb.addActionListener(e -> navigation.setText(String.join("\n", planner.herbRun(snapshot))));
+        JPanel shortcuts = new JPanel(new GridLayout(2, 2, 4, 4));
+        shortcuts.add(available);
+        shortcuts.add(nearest);
+        shortcuts.add(herb);
+        JPanel controls = new JPanel(new BorderLayout(0, 5));
+        controls.add(selector, BorderLayout.NORTH);
+        controls.add(shortcuts, BorderLayout.CENTER);
+        p.add(controls, BorderLayout.NORTH);
+        p.add(wrap(navigation), BorderLayout.CENTER);
+        return p;
     }
 
     private JPanel aiPanel()
@@ -120,9 +159,9 @@ public class CompanionPanel extends PluginPanel
         JPanel p = new JPanel(new BorderLayout(4,4)); JPanel bottom = new JPanel(new BorderLayout(4,4));
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
         JButton clear = new JButton("Clear chat");
-        clear.addActionListener(e -> { aiConversationRevision++; aiHistory.clear(); chat.setText(""); });
+        clear.addActionListener(e -> clearAiConversation());
         actions.add(clear); actions.add(askButton);
-        bottom.add(prompt, BorderLayout.CENTER); bottom.add(actions, BorderLayout.EAST);
+        bottom.add(prompt, BorderLayout.NORTH); bottom.add(actions, BorderLayout.SOUTH);
         askButton.addActionListener(e -> askAi()); prompt.addActionListener(e -> askAi());
         p.add(wrap(chat), BorderLayout.CENTER); p.add(bottom, BorderLayout.SOUTH); return p;
     }
@@ -137,10 +176,13 @@ public class CompanionPanel extends PluginPanel
         prompt.setText("");
         chat.append("\nYou: " + q + "\nAssistant: thinking…\n");
         sendEnabled(false);
-        new SwingWorker<String, Void>() { protected String doInBackground() throws Exception { return ai.ask(q, requestSnapshot, requestHistory); }
+        SwingWorker<String, Void> worker = new SwingWorker<String, Void>() { protected String doInBackground() throws Exception { return ai.ask(q, requestSnapshot, requestHistory); }
             protected void done()
             {
+                if (activeAiWorker != this) return;
+                activeAiWorker = null;
                 sendEnabled(true);
+                if (isCancelled()) return;
                 try
                 {
                     String answer = get();
@@ -158,19 +200,38 @@ public class CompanionPanel extends PluginPanel
                         chat.append("Error: " + rootMessage(ex) + "\n\n");
                 }
             }
-        }.execute();
+        };
+        activeAiWorker = worker;
+        worker.execute();
     }
     private void sendEnabled(boolean enabled) { prompt.setEnabled(enabled); askButton.setEnabled(enabled); }
-    private String rootMessage(Throwable t) { Throwable x=t; while (x.getCause()!=null) x=x.getCause(); return x.getMessage()==null?x.toString():x.getMessage(); }
+    private String rootMessage(Throwable t)
+    {
+        Throwable cause = t;
+        while (cause instanceof java.util.concurrent.ExecutionException && cause.getCause() != null)
+            cause = cause.getCause();
+        if (cause instanceof IllegalStateException || cause instanceof IllegalArgumentException)
+            return cause.getMessage() == null ? "The provider returned an error." : cause.getMessage();
+        return "The request failed. Check your endpoint and network connection.";
+    }
+
+    private void clearAiConversation()
+    {
+        aiConversationRevision++;
+        if (activeAiWorker != null) activeAiWorker.cancel(true);
+        activeAiWorker = null;
+        aiHistory.clear();
+        chat.setText("");
+        prompt.setText("");
+        sendEnabled(true);
+    }
 
     public void refresh(AccountSnapshot s)
     {
         if (s == null)
         {
             snapshot = null;
-            aiConversationRevision++;
-            aiHistory.clear();
-            chat.setText("");
+            clearAiConversation();
             goals.clear();
             renderGoals();
             showEmpty();
@@ -181,9 +242,7 @@ public class CompanionPanel extends PluginPanel
         {
             loadGoals();
             renderGoals();
-            aiConversationRevision++;
-            aiHistory.clear();
-            chat.setText("");
+            clearAiConversation();
         }
         if (snapshot != null
             && snapshot.getPlayerName().equals(s.getPlayerName())
@@ -400,7 +459,7 @@ public class CompanionPanel extends PluginPanel
     private JPanel questPanel()
     {
         JPanel panel = new JPanel(new BorderLayout(6, 6));
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel controls = new JPanel(new BorderLayout(0, 5));
         JButton questGuide = new JButton("Plan this quest");
         JButton nextUnlock = new JButton("Find my next unlock");
         questGuide.addActionListener(e -> {
@@ -409,7 +468,11 @@ public class CompanionPanel extends PluginPanel
                 ". Use my current quest states, skill levels, diaries, inventory, equipment, bank and teleports. List prerequisites, boostable skill checks, exact item/supply checklist, recommended inventory, travel route, safe alternatives and permanent account unlocks. Cite current OSRS Wiki pages and distinguish hard requirements from recommendations.");
         });
         nextUnlock.addActionListener(e -> queueAiPrompt("Analyse my current Ironman quest and diary progress, levels, bank and teleports. Rank the next 10 highest-value quest and diary unlocks for account progression. For each, explain why it matters, prerequisites, required levels/items, likely time/cost and the best order to complete them. Cite current OSRS Wiki pages and do not assume I have banked items available without withdrawing them."));
-        controls.add(new JLabel("Quest")); controls.add(questName); controls.add(questGuide); controls.add(nextUnlock);
+        JPanel actions = new JPanel(new GridLayout(2, 1, 0, 4));
+        actions.add(questGuide);
+        actions.add(nextUnlock);
+        controls.add(questName, BorderLayout.NORTH);
+        controls.add(actions, BorderLayout.CENTER);
         panel.add(controls, BorderLayout.NORTH);
         panel.add(new JScrollPane(quests), BorderLayout.CENTER);
         return panel;
@@ -418,7 +481,7 @@ public class CompanionPanel extends PluginPanel
     private JPanel activitiesPanel()
     {
         JPanel panel = new JPanel(new BorderLayout(6, 6));
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel controls = new JPanel(new BorderLayout(0, 5));
         JButton plan = new JButton("Build account-aware plan");
         plan.addActionListener(e -> {
             Object value = activityChoice.getEditor().getItem();
@@ -426,9 +489,8 @@ public class CompanionPanel extends PluginPanel
             if (!activity.isEmpty()) queueAiPrompt("Build a practical Ironman plan for " + activity +
                 " using my current skills, quests, diaries, inventory, equipment, bank, Slayer assignment and teleports. Cover unlocks, preparation, supplies, best Ironman methods, route and transport, alternatives, progression value and what I should do next. Cite current OSRS Wiki sources. Clearly label any requirement or mechanic you cannot verify.");
         });
-        controls.add(new JLabel("Activity"));
-        controls.add(activityChoice);
-        controls.add(plan);
+        controls.add(activityChoice, BorderLayout.NORTH);
+        controls.add(plan, BorderLayout.SOUTH);
         panel.add(controls, BorderLayout.NORTH);
         panel.add(new JScrollPane(activities), BorderLayout.CENTER);
         return panel;
@@ -437,21 +499,14 @@ public class CompanionPanel extends PluginPanel
     private void queueAiPrompt(String value)
     {
         prompt.setText(value);
-        for (int i = 0; i < tabs.getTabCount(); i++)
-        {
-            if ("AI".equals(tabs.getTitleAt(i)))
-            {
-                tabs.setSelectedIndex(i);
-                prompt.requestFocusInWindow();
-                break;
-            }
-        }
+        sectionChoice.setSelectedItem("AI");
+        prompt.requestFocusInWindow();
     }
 
     private JPanel farmingPanel()
     {
         JPanel panel = new JPanel(new BorderLayout(6, 6));
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel controls = new JPanel(new GridLayout(2, 1, 0, 5));
         JButton route = new JButton("Build accessible herb route");
         route.addActionListener(e -> {
             if (snapshot == null)
@@ -476,7 +531,7 @@ public class CompanionPanel extends PluginPanel
     {
         JPanel panel = new JPanel(new BorderLayout(6, 6));
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton taskGuide = new JButton("Draft Ironman task guide");
+        JButton taskGuide = new JButton("Draft Slayer task guide");
         taskGuide.addActionListener(e -> {
             if (snapshot == null || !snapshot.getSlayerTask().isActive())
             {
@@ -496,7 +551,7 @@ public class CompanionPanel extends PluginPanel
     {
         JPanel panel = new JPanel(new BorderLayout(6, 6));
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton progression = new JButton("Draft account-wide progression plan");
+        JButton progression = new JButton("Draft progression plan");
         progression.addActionListener(e -> {
             queueAiPrompt("Build a detailed Ironman progression plan for my current OSRS account. Use my real skill levels, XP, quest and diary progress, active spellbook, equipment and bank. Prioritise account unlocks, efficient training methods, useful quest prerequisites, transport unlocks, skilling supplies and boss readiness. Cover every skill, but rank the next 5 highest-value goals rather than giving generic advice. Use current OSRS Wiki sources and cite them. Separate hard requirements, recommendations and account-specific assumptions.");
         });
@@ -509,7 +564,7 @@ public class CompanionPanel extends PluginPanel
     private JPanel bossingPanel()
     {
         JPanel panel = new JPanel(new BorderLayout(6, 6));
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        JPanel controls = new JPanel(new BorderLayout(0, 5));
         JButton readiness = new JButton("Check readiness");
         JButton aiGuide = new JButton("Draft full AI guide");
         readiness.addActionListener(e -> {
@@ -524,7 +579,11 @@ public class CompanionPanel extends PluginPanel
             if (!boss.isEmpty()) queueAiPrompt("Build a complete Ironman-specific guide for " + boss +
                 " using my current account, equipment and bank. Verify current access requirements, recommended stats, Ironman-obtainable gear alternatives, inventory and supply quantities, teleport routes, mechanics, death risks and progression value. Use current OSRS Wiki sources, cite relevant pages, and separate hard requirements from recommendations. If this boss has variants or multiple methods, compare them.");
         });
-        controls.add(new JLabel("Boss:")); controls.add(bossChoice); controls.add(readiness); controls.add(aiGuide);
+        JPanel actions = new JPanel(new GridLayout(2, 1, 0, 4));
+        actions.add(readiness);
+        actions.add(aiGuide);
+        controls.add(bossChoice, BorderLayout.NORTH);
+        controls.add(actions, BorderLayout.CENTER);
         panel.add(controls, BorderLayout.NORTH);
         panel.add(new JScrollPane(bossing), BorderLayout.CENTER);
         bossing.setText("Select a boss and check your quest, Slayer, skill, teleport and preparation readiness.\n\nThe readiness view is a starting checklist; use Draft full AI guide for detailed mechanics and Ironman gear alternatives.");
@@ -541,7 +600,7 @@ public class CompanionPanel extends PluginPanel
             JLabel detail=new JLabel("  "+g.getDetail()+(g.getTargetDate()==null?"":" · target "+g.getTargetDate()));
             JPanel row=new JPanel(new BorderLayout()); row.add(check,BorderLayout.NORTH); row.add(detail,BorderLayout.CENTER); row.setBorder(BorderFactory.createEmptyBorder(4,2,4,2)); list.add(row);
         }
-        JPanel controls=new JPanel(new FlowLayout(FlowLayout.LEFT)); JButton add=new JButton("Add goal"); JButton remove=new JButton("Remove completed");
+        JPanel controls=new JPanel(new GridLayout(1, 2, 4, 0)); JButton add=new JButton("Add goal"); JButton remove=new JButton("Remove done");
         add.addActionListener(e->addGoal()); remove.addActionListener(e->{goals.removeIf(Goal::isComplete);saveGoals();renderGoals();}); controls.add(add);controls.add(remove);
         goalsPanel.add(controls,BorderLayout.NORTH);goalsPanel.add(new JScrollPane(list),BorderLayout.CENTER);goalsPanel.revalidate();goalsPanel.repaint();
     }
@@ -593,7 +652,7 @@ public class CompanionPanel extends PluginPanel
     private String dec(String s){return new String(Base64.getDecoder().decode(s),java.nio.charset.StandardCharsets.UTF_8);}
     private void showEmpty()
     {
-        dashboard.setText("Log into Old School RuneScape to capture your account.\n\nOpen your bank once to populate the saved bank snapshot.\n\nUse the tabs to review inventory, quests, Slayer, goals, activities, routes and AI planning.");
+        dashboard.setText("Log into Old School RuneScape to capture your account.\n\nOpen your bank once to populate the saved bank snapshot.\n\nUse the View selector to review inventory, quests, Slayer, goals, activities, routes and AI planning.");
         bank.setText("Open your bank to capture its contents.");
         inventory.setText("Log in to capture inventory.");
         quests.setText("Log in to capture quest and achievement diary progress.");

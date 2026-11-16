@@ -13,14 +13,16 @@ public class FairyRingCatalogTest
         Set<String> codes = new HashSet<>();
         for (FairyRingCatalog.Ring ring : FairyRingCatalog.ALL)
         {
-            assertNotNull(ring.location);
             assertTrue(codes.add(ring.code));
         }
-        assertEquals(47, FairyRingCatalog.ALL.size());
+        assertEquals(55, FairyRingCatalog.ALL.size());
+        assertEquals(8, FairyRingCatalog.ALL.stream().filter(r -> r.location == null).count());
         FairyRingCatalog.Ring ajp = FairyRingCatalog.ALL.stream()
             .filter(ring -> ring.code.equals("AJP")).findFirst().orElse(null);
         assertNotNull(ajp);
         assertEquals(1648, ajp.location.getX());
         assertEquals(3011, ajp.location.getY());
+        assertFalse(FairyRingCatalog.canWalkToDestination(
+            FairyRingCatalog.ALL.stream().filter(r -> r.code.equals("DLR")).findFirst().get(), "Zul-Andra"));
     }
 }

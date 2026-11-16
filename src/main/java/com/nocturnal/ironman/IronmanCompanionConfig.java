@@ -21,7 +21,10 @@ public interface IronmanCompanionConfig extends Config
     default String model() { return "gpt-4o-mini"; }
 
     @ConfigItem(keyName = "includeBankInAi", name = "Include bank snapshot in AI context", description = "Send cached bank item names and quantities with AI requests")
-    default boolean includeBankInAi() { return true; }
+    default boolean includeBankInAi() { return false; }
+
+    @ConfigItem(keyName = "wikiLookupsEnabled", name = "Look up OSRS Wiki for AI", description = "Send the first 200 characters of your question to the public OSRS Wiki search API to retrieve current reference material")
+    default boolean wikiLookupsEnabled() { return true; }
 
     @ConfigItem(keyName = "includeProgressInAi", name = "Include quests and diaries in AI context", description = "Send detected quest and achievement diary progress with AI requests")
     default boolean includeProgressInAi() { return true; }

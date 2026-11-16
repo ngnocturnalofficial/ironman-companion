@@ -27,6 +27,7 @@ public final class AccountSnapshot
     private final NavigationSnapshot navigation;
     private final Map<Integer, String> itemNames;
     private final List<FarmingPatchSnapshot> farmingPatches;
+    private final Map<String, Integer> travelSettings;
 
     public AccountSnapshot(String playerName, Map<String, Integer> realLevels, Map<String, Integer> xp,
         Map<Integer, Integer> inventory, Map<Integer, Integer> equipment, Map<Integer, Integer> bank,
@@ -85,6 +86,18 @@ public final class AccountSnapshot
         SlayerTaskSnapshot slayerTask, NavigationSnapshot navigation, Map<Integer, String> itemNames,
         List<FarmingPatchSnapshot> farmingPatches)
     {
+        this(playerName, accountType, spellbook, realLevels, xp, inventory, equipment, bank,
+            combatLevel, totalLevel, location, bankCapturedAt, bankOpen, progress, slayerTask,
+            navigation, itemNames, farmingPatches, Collections.emptyMap());
+    }
+
+    public AccountSnapshot(String playerName, String accountType, String spellbook,
+        Map<String, Integer> realLevels, Map<String, Integer> xp, Map<Integer, Integer> inventory,
+        Map<Integer, Integer> equipment, Map<Integer, Integer> bank, int combatLevel, int totalLevel,
+        String location, Instant bankCapturedAt, boolean bankOpen, ProgressSnapshot progress,
+        SlayerTaskSnapshot slayerTask, NavigationSnapshot navigation, Map<Integer, String> itemNames,
+        List<FarmingPatchSnapshot> farmingPatches, Map<String, Integer> travelSettings)
+    {
         this.playerName = playerName == null ? "Unknown" : playerName;
         this.accountType = accountType == null ? "Unknown" : accountType;
         this.spellbook = spellbook == null ? "Unknown" : spellbook;
@@ -105,6 +118,7 @@ public final class AccountSnapshot
         this.itemNames = immutable(itemNames);
         this.farmingPatches = Collections.unmodifiableList(new java.util.ArrayList<>(
             farmingPatches == null ? Collections.emptyList() : farmingPatches));
+        this.travelSettings = immutable(travelSettings);
     }
 
     private static <K, V> Map<K, V> immutable(Map<K, V> source)
@@ -132,6 +146,9 @@ public final class AccountSnapshot
     public Map<Integer, String> getItemNames() { return itemNames; }
     public String getItemName(int id) { return itemNames.getOrDefault(id, "Item #" + id); }
     public List<FarmingPatchSnapshot> getFarmingPatches() { return farmingPatches; }
+    /** Returns -1 when a travel unlock or toggle was not captured. */
+    public int getTravelSetting(String name) { return travelSettings.getOrDefault(name, -1); }
+    public Map<String, Integer> getTravelSettings() { return travelSettings; }
 
     public int countItem(int id)
     {

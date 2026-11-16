@@ -18,6 +18,36 @@ public class PlannerServiceTest
         return new PlannerService(new ScenePathfinder());
     }
 
+    @Test
+    public void quetzalWhistleRoutesExcludeBlueprintsAndUnbuiltLandings()
+    {
+        Map<Integer, Integer> inventory = new HashMap<>();
+        inventory.put(29271, 1);
+        inventory.put(29251, 1);
+        Map<Integer, String> itemNames = new HashMap<>();
+        itemNames.put(29271, "Basic quetzal whistle");
+        itemNames.put(29251, "Basic quetzal whistle blueprint");
+        Map<String, Integer> travelSettings = new HashMap<>();
+        travelSettings.put("visitedVarlamore", 1);
+        AccountSnapshot visited = new AccountSnapshot("test", "Ironman", "Standard",
+            Collections.emptyMap(), Collections.emptyMap(), inventory, Collections.emptyMap(),
+            Collections.emptyMap(), 3, 10, "unknown", null, false, ProgressSnapshot.empty(),
+            SlayerTaskSnapshot.empty(), null, itemNames, Collections.emptyList(), travelSettings);
+
+        List<String> options = planner().teleports(visited, false);
+        assertTrue(options.stream().anyMatch(line -> line.contains("Quetzal whistle → Hunter Guild × 1")));
+        assertTrue(options.stream().anyMatch(line -> line.contains("Quetzal whistle — Sunset Coast → Sunset Coast × 1")));
+        assertFalse(options.stream().anyMatch(line -> line.contains("Quetzal whistle — Kastori →")));
+
+        travelSettings.put("quetzalKastori", 1);
+        AccountSnapshot built = new AccountSnapshot("test", "Ironman", "Standard",
+            Collections.emptyMap(), Collections.emptyMap(), inventory, Collections.emptyMap(),
+            Collections.emptyMap(), 3, 10, "unknown", null, false, ProgressSnapshot.empty(),
+            SlayerTaskSnapshot.empty(), null, itemNames, Collections.emptyList(), travelSettings);
+        assertTrue(planner().teleports(built, false).stream()
+            .anyMatch(line -> line.contains("Quetzal whistle — Kastori → Kastori × 1")));
+    }
+
     private AccountSnapshot account(SlayerTaskSnapshot task)
     {
         Map<String, Integer> levels = new HashMap<>();
@@ -97,7 +127,7 @@ public class PlannerServiceTest
             new ProgressSnapshot(quests, Collections.emptyMap()), SlayerTaskSnapshot.empty(), null, names);
         List<String> baseLines = planner().teleports(base);
         assertTrue(baseLines.stream().anyMatch(line -> line.contains("Watchtower teleport → Watchtower")));
-        assertFalse(baseLines.stream().anyMatch(line -> line.contains("Yanille landing")));
+        assertFalse(baseLines.stream().anyMatch(line -> line.contains("Watchtower teleport — Yanille landing → Yanille")));
 
         AccountSnapshot diary = new AccountSnapshot("test", "Ironman", "Standard",
             Collections.emptyMap(), Collections.emptyMap(), inventory, Collections.emptyMap(),
@@ -105,7 +135,7 @@ public class PlannerServiceTest
             new ProgressSnapshot(quests, Collections.singletonMap("Ardougne", "Hard: Complete")),
             SlayerTaskSnapshot.empty(), null, names);
         List<String> diaryLines = planner().teleports(diary);
-        assertFalse(diaryLines.stream().anyMatch(line -> line.contains("Watchtower teleport → Watchtower")));
+        assertTrue(diaryLines.stream().anyMatch(line -> line.contains("Watchtower teleport → Watchtower")));
         assertTrue(diaryLines.stream().anyMatch(line -> line.contains("Watchtower teleport — Yanille landing → Yanille")));
     }
 
@@ -122,6 +152,62 @@ public class PlannerServiceTest
         assertTrue(lines.stream().anyMatch(line -> line.contains("Games necklace → Burthorpe")));
         assertTrue(lines.stream().anyMatch(line -> line.contains("Games necklace — Barbarian Assault → Barbarian Assault")));
         assertTrue(lines.stream().anyMatch(line -> line.contains("Games necklace — Wintertodt → Wintertodt Camp")));
+    }
+
+    @Test
+    public void enchantedLyreDestinationsFollowFremennikDiaryUnlocks()
+    {
+        Map<Integer, Integer> inventory = Collections.singletonMap(23458, 1);
+        Map<Integer, String> itemNames = Collections.singletonMap(23458, "Enchanted lyre(i)");
+        Map<String, String> diaries = new HashMap<>();
+        String[] lockedDestinations = {
+            "Enchanted lyre — Waterbirth Island", "Enchanted lyre — Neitiznot", "Enchanted lyre — Jatizso"
+        };
+        for (String status : new String[]{"Easy: Complete", "Hard: Complete", "Elite: Complete"})
+        {
+            diaries.put("Fremennik", status);
+            AccountSnapshot account = new AccountSnapshot("test", "Ironman", "Standard",
+                Collections.emptyMap(), Collections.emptyMap(), inventory, Collections.emptyMap(),
+                Collections.emptyMap(), 3, 10, "test", null, false,
+                new ProgressSnapshot(Collections.emptyMap(), diaries), SlayerTaskSnapshot.empty(),
+                null, itemNames);
+            List<String> lines = planner().teleports(account);
+            assertTrue(lines.stream().anyMatch(line -> line.contains("Enchanted lyre → Rellekka")));
+            for (int i = 0; i < lockedDestinations.length; i++)
+            {
+                String selectedDestination = lockedDestinations[i];
+                boolean available = "Elite: Complete".equals(status)
+                    || (i == 0 && "Hard: Complete".equals(status));
+                assertEquals(selectedDestination + " at " + status, available,
+                    lines.stream().anyMatch(line -> line.contains(selectedDestination + " → ")));
+            }
+        }
+    }
+
+    @Test
+    public void ortusHerbRouteDoesNotAssumeUnvisitedVarlamoreRingUnlocked()
+    {
+        Map<String, String> quests = fairyRingQuests("FINISHED");
+        quests.put("Children of the Sun", "FINISHED");
+        Map<Integer, Integer> equipment = Collections.singletonMap(772, 1);
+        Map<Integer, String> itemNames = Collections.singletonMap(772, "Dramen staff");
+        AccountSnapshot unvisited = new AccountSnapshot("test", "Ironman", "Standard",
+            Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap(), equipment,
+            Collections.emptyMap(), 3, 10, "3200, 3424", null, false,
+            new ProgressSnapshot(quests, Collections.emptyMap()), SlayerTaskSnapshot.empty(),
+            null, itemNames);
+        List<String> before = planner().herbRun(unvisited);
+        assertTrue(before.stream().anyMatch(line -> line.contains("Ortus Farm herb patch")
+            && line.contains("visit Varlamore")));
+
+        AccountSnapshot visited = new AccountSnapshot("test", "Ironman", "Standard",
+            Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap(), equipment,
+            Collections.emptyMap(), 3, 10, "3200, 3424", null, false,
+            new ProgressSnapshot(quests, Collections.emptyMap()), SlayerTaskSnapshot.empty(),
+            null, itemNames, Collections.emptyList(), Collections.singletonMap("visitedVarlamore", 1));
+        List<String> after = planner().herbRun(visited);
+        assertTrue(after.stream().anyMatch(line -> line.contains("Ortus Farm herb patch")
+            && line.contains("dial AJP")));
     }
 
     @Test
@@ -168,16 +254,16 @@ public class PlannerServiceTest
         assertTrue(baseLines.stream().anyMatch(line -> line.contains("Camelot teleport → Camelot")));
 
         Map<String, String> diaries = new HashMap<>();
-        diaries.put("Varrock", "Hard: Complete");
+        diaries.put("Varrock", "Medium: Complete");
         diaries.put("Kandarin", "Hard: Complete");
         AccountSnapshot upgraded = new AccountSnapshot("test", "Ironman", "Standard",
             Collections.emptyMap(), Collections.emptyMap(), inventory, Collections.emptyMap(),
             Collections.emptyMap(), 3, 10, "test", null, false,
             new ProgressSnapshot(Collections.emptyMap(), diaries), SlayerTaskSnapshot.empty(), null, names);
         List<String> upgradedLines = planner().teleports(upgraded);
-        assertFalse(upgradedLines.stream().anyMatch(line -> line.contains("Varrock teleport → Varrock")));
+        assertTrue(upgradedLines.stream().anyMatch(line -> line.contains("Varrock teleport → Varrock")));
         assertTrue(upgradedLines.stream().anyMatch(line -> line.contains("Varrock teleport — Grand Exchange landing → Grand Exchange")));
-        assertFalse(upgradedLines.stream().anyMatch(line -> line.contains("Camelot teleport → Camelot")));
+        assertTrue(upgradedLines.stream().anyMatch(line -> line.contains("Camelot teleport → Camelot")));
         assertTrue(upgradedLines.stream().anyMatch(line -> line.contains("Camelot teleport — Seers' bank landing → Seers' Village bank")));
     }
 
@@ -188,7 +274,7 @@ public class PlannerServiceTest
         Map<Integer, String> names = Collections.singletonMap(772, "Dramen staff");
         Map<String, String> quests = fairyRingQuests("IN_PROGRESS");
         AccountSnapshot inventoryOnly = new AccountSnapshot("test", "Ironman", "Standard",
-            Collections.emptyMap(), Collections.emptyMap(), inventory, Collections.emptyMap(),
+            Collections.singletonMap("Agility", 76), Collections.emptyMap(), inventory, Collections.emptyMap(),
             Collections.emptyMap(), 3, 10, "3200, 3424", null, false,
             new ProgressSnapshot(quests, Collections.emptyMap()), SlayerTaskSnapshot.empty(),
             new com.nocturnal.ironman.model.NavigationSnapshot(new net.runelite.api.coords.WorldPoint(3200, 3424, 0), 3150, 3350, null), names);
@@ -197,7 +283,7 @@ public class PlannerServiceTest
         assertFalse(inventoryLines.stream().anyMatch(line -> line.contains("Best network option")));
 
         AccountSnapshot equipped = new AccountSnapshot("test", "Ironman", "Standard",
-            Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap(), inventory,
+            Collections.singletonMap("Agility", 76), Collections.emptyMap(), Collections.emptyMap(), inventory,
             Collections.emptyMap(), 3, 10, "3200, 3424", null, false,
             new ProgressSnapshot(quests, Collections.emptyMap()), SlayerTaskSnapshot.empty(),
             new com.nocturnal.ironman.model.NavigationSnapshot(new net.runelite.api.coords.WorldPoint(3200, 3424, 0), 3150, 3350, null), names);
@@ -212,7 +298,7 @@ public class PlannerServiceTest
         Map<String, String> quests = fairyRingQuests("FINISHED");
         Map<String, String> diaries = Collections.singletonMap("Lumbridge & Draynor", "Elite: Complete");
         AccountSnapshot account = new AccountSnapshot("test", "Ironman", "Standard",
-            Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap(),
+            Collections.singletonMap("Agility", 76), Collections.emptyMap(), Collections.emptyMap(), Collections.emptyMap(),
             Collections.emptyMap(), 3, 10, "3200, 3424", null, false,
             new ProgressSnapshot(quests, diaries), SlayerTaskSnapshot.empty(),
             new com.nocturnal.ironman.model.NavigationSnapshot(new net.runelite.api.coords.WorldPoint(3200, 3424, 0), 3150, 3350, null),
@@ -244,6 +330,7 @@ public class PlannerServiceTest
         quests.put("Lost City", "FINISHED");
         quests.put("Fairytale I - Growing Pains", "FINISHED");
         quests.put("Fairytale II - Cure a Queen", fairyTwoState);
+        quests.put("Regicide", "FINISHED");
         return quests;
     }
 

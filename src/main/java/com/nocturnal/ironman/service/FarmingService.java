@@ -23,6 +23,7 @@ public class FarmingService
     private static final String CONFIG_PREFIX = "farmingPatch.";
     private static final long HERB_GROWTH_TICK_MINUTES = 20;
     private static final int HERB_GROWTH_STAGES = 4;
+    private static final long OBSERVATION_REFRESH_SECONDS = 300;
 
     private static final List<PatchDefinition> PATCHES = Collections.unmodifiableList(Arrays.asList(
         patch("Ardougne herb patch", VarbitID.FARMING_TRANSMIT_D, 10548),
@@ -96,12 +97,15 @@ public class FarmingService
 
     private void persistIfChanged(PatchDefinition patch, int value)
     {
+        if (decode(value) == null) return;
         String key = CONFIG_PREFIX + patch.key;
         String raw = configManager.getRSProfileConfiguration(CONFIG_GROUP, key);
         StoredState previous = parse(raw);
-        if (previous == null || previous.value != value)
+        long now = Instant.now().getEpochSecond();
+        if (previous == null || previous.value != value
+            || now - previous.timestamp >= OBSERVATION_REFRESH_SECONDS)
         {
-            String next = value + ":" + Instant.now().getEpochSecond();
+            String next = value + ":" + now;
             configManager.setRSProfileConfiguration(CONFIG_GROUP, key, next);
         }
     }

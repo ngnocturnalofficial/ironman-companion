@@ -50,19 +50,15 @@ public final class SpellTeleportCatalog
             if (account.getRealLevels().getOrDefault("Magic", 1) < magicLevel) return false;
             if (requiredQuest != null
                 && !"FINISHED".equals(account.getProgress().getQuests().get(requiredQuest))) return false;
-            String ardougneDiary = account.getProgress().getDiaries().get("Ardougne");
-            boolean ardougneHardComplete = ardougneDiary != null && ardougneDiary.contains("Hard: Complete");
-            String varrockDiary = account.getProgress().getDiaries().get("Varrock");
-            boolean varrockHardComplete = varrockDiary != null && varrockDiary.contains("Hard: Complete");
-            String kandarinDiary = account.getProgress().getDiaries().get("Kandarin");
-            boolean kandarinHardComplete = kandarinDiary != null && kandarinDiary.contains("Hard: Complete");
-            if ("Watchtower Teleport".equals(name) && ardougneHardComplete) return false;
-            if ("Varrock Teleport".equals(name) && varrockHardComplete) return false;
-            if ("Camelot Teleport".equals(name) && kandarinHardComplete) return false;
             if (requiredDiary != null)
             {
                 String diary = account.getProgress().getDiaries().get(requiredDiary);
-                return diary != null && diary.contains(requiredDiaryTier + ": Complete");
+                boolean unlocked = diary != null && (diary.contains(requiredDiaryTier + ": Complete")
+                    || ("Medium".equals(requiredDiaryTier) && (diary.contains("Hard: Complete") || diary.contains("Elite: Complete")))
+                    || ("Hard".equals(requiredDiaryTier) && diary.contains("Elite: Complete")));
+                if (!unlocked) return false;
+                // Diary rewards add right-click destinations even when a different default is set.
+                return true;
             }
             return true;
         }
@@ -70,19 +66,19 @@ public final class SpellTeleportCatalog
 
     public static final List<SpellTeleport> ALL = Collections.unmodifiableList(Arrays.asList(
         new SpellTeleport("Varrock Teleport", "Standard", 25, null, "Varrock", 3213, 3424, "Standard spellbook"),
-        new SpellTeleport("Varrock Teleport (Grand Exchange landing)", "Standard", 25, null, "Varrock", "Hard", "Grand Exchange", 3164, 3478, "Varrock Hard Diary changes the Varrock Teleport landing point"),
+        new SpellTeleport("Varrock Teleport (Grand Exchange landing)", "Standard", 25, null, "Varrock", "Medium", "Grand Exchange", 3164, 3478, "Select Grand Exchange from the spell menu; requires Varrock Medium Diary"),
         new SpellTeleport("Lumbridge Teleport", "Standard", 31, null, "Lumbridge", 3222, 3218, "Standard spellbook"),
         new SpellTeleport("Falador Teleport", "Standard", 37, null, "Falador", 2965, 3381, "Standard spellbook"),
         new SpellTeleport("House Teleport", "Standard", 40, null, "Player-owned house", 0, 0, "Landing point depends on house portal and redirect setting"),
         new SpellTeleport("Camelot Teleport", "Standard", 45, null, "Camelot", 2757, 3477, "Standard spellbook"),
-        new SpellTeleport("Camelot Teleport (Seers' bank landing)", "Standard", 45, null, "Kandarin", "Hard", "Seers' Village bank", 2726, 3485, "Kandarin Hard Diary changes the Camelot Teleport landing point"),
+        new SpellTeleport("Camelot Teleport (Seers' bank landing)", "Standard", 45, null, "Kandarin", "Hard", "Seers' Village bank", 2726, 3485, "Select Seers' bank from the spell menu; requires Kandarin Hard Diary"),
         new SpellTeleport("Ardougne Teleport", "Standard", 51, "Plague City", "Ardougne", 2664, 3306, "Plague City required"),
         new SpellTeleport("Watchtower Teleport", "Standard", 58, "Watchtower", "Watchtower", 2547, 3114, "Watchtower quest required"),
         new SpellTeleport("Trollheim Teleport", "Standard", 61, "Eadgar's Ruse", "Trollheim", 2891, 3678, "Eadgar's Ruse required"),
         new SpellTeleport("Kourend Castle Teleport", "Standard", 48, "Client of Kourend", "Kourend Castle", 1643, 3672, "Client of Kourend required"),
         new SpellTeleport("Civitas illa Fortis Teleport", "Standard", 54, "Twilight's Promise", "Civitas illa Fortis", 1681, 3133, "Twilight's Promise required"),
-        new SpellTeleport("Ape Atoll Teleport", "Standard", 64, "Recipe for Disaster - Freeing King Awowogei", "Ape Atoll", 2796, 2791, "King Awowogei subquest required"),
-        new SpellTeleport("Watchtower Teleport (Yanille landing)", "Standard", 58, "Watchtower", "Ardougne", "Hard", "Yanille", 2584, 3097, "Ardougne Hard Diary changes the Watchtower Teleport landing point"),
+        new SpellTeleport("Ape Atoll Teleport", "Standard", 64, "Recipe for Disaster - King Awowogei", "Ape Atoll", 2796, 2791, "King Awowogei subquest required"),
+        new SpellTeleport("Watchtower Teleport (Yanille landing)", "Standard", 58, "Watchtower", "Ardougne", "Hard", "Yanille", 2584, 3097, "Select Yanille from the spell menu; requires Ardougne Hard Diary"),
 
         new SpellTeleport("Paddewwa Teleport", "Ancient", 54, "Desert Treasure I", "Paddewwa", 3097, 9880, "Ancient Magicks"),
         new SpellTeleport("Senntisten Teleport", "Ancient", 60, "Desert Treasure I", "Senntisten", 3319, 3336, "Ancient Magicks"),

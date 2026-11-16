@@ -16,13 +16,13 @@ import net.runelite.api.GameState;
 import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.events.ItemContainerChanged;
-import net.runelite.api.events.QuestChanged;
 import net.runelite.api.events.VarbitChanged;
 import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.RuneScapeProfileChanged;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.ui.ClientToolbar;
@@ -101,21 +101,27 @@ public class IronmanCompanionPlugin extends Plugin
         }
         else if (event.getGameState() == GameState.LOGIN_SCREEN || event.getGameState() == GameState.HOPPING)
         {
+            accountService.clearSession();
             if (companionOverlay != null) companionOverlay.setSnapshot(null);
             SwingUtilities.invokeLater(() -> { if (panel != null) panel.refresh(null); });
         }
     }
 
     @Subscribe
-    public void onQuestChanged(QuestChanged event)
+    public void onRuneScapeProfileChanged(RuneScapeProfileChanged event)
     {
-        if (client.getGameState() == GameState.LOGGED_IN) refreshSnapshot(false, true);
+        clientThread.invokeLater(() -> {
+            accountService.reloadBankCache();
+            if (companionOverlay != null) companionOverlay.setSnapshot(null);
+            SwingUtilities.invokeLater(() -> { if (panel != null) panel.refresh(null); });
+            if (client.getGameState() == GameState.LOGGED_IN) refreshSnapshot(false, true);
+        });
     }
 
     @Subscribe
     public void onItemContainerChanged(ItemContainerChanged event)
     {
-        if (client.getGameState() == GameState.LOGGED_IN) refreshSnapshot(true, false);
+        if (client.getGameState() == GameState.LOGGED_IN) refreshSnapshot(false, false);
     }
 
     @Subscribe
